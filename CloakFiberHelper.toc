@@ -1,0 +1,14 @@
+## Interface: 110200
+## Title: CloakFiberHelper
+## Notes: Checks if your equipped cloak contains the desired fiber for your current specialization.
+## Notes-deDE: Prüft, ob dein ausgerüsteter Umhang die gewünschte Faser für deine aktuelle Spezialisierung enthält.
+## Author: keeperxy
+## Version: 1.0.0
+## SavedVariablesPerCharacter: CloakFiberHelperDB
+## DefaultLocale: enUS
+## IconTexture: Interface\AddOns\CloakFiberHelper\Icons\cloakfiberhelper
+
+ Locales\\enUS.lua
+ Locales\\deDE.lua
+core.lua
+ui.lua
