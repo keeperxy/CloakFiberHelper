@@ -1,9 +1,10 @@
 ## Faser Helfer (CloakFiberHelper)
 
-Prüft, ob dein ausgerüsteter Umhang eine Faser aus der gewünschten Kategorie für deine aktuelle Spezialisierung enthält. Bietet einfache Slash-Befehle und eine kleine Hilfe-UI.
+Prüft, ob dein ausgerüsteter Umhang eine Faser aus der gewünschten Kategorie für deine aktuelle Spezialisierung enthält. Enthält ein Ingame-Optionsmenü sowie optionale Slash-Befehle.
 
 ### Funktionen
 - Auto-Scan beim Login, beim Umhangwechsel und beim Spezialisationswechsel
+- Ingame-Konfiguration über Optionen → AddOns oder `/cfh`
 - Manueller Scan per Slash-Befehl oder über einen kleinen „Jetzt prüfen“-Button
 - Einstellungen pro Charakter (SavedVariables)
 - Gewünschte Faser-Kategorie pro Skillung (Kritische Trefferchance, Tempo, Vielseitigkeit, Meisterschaft)
@@ -11,20 +12,26 @@ Prüft, ob dein ausgerüsteter Umhang eine Faser aus der gewünschten Kategorie 
 - Lokalisierung auf Deutsch und Englisch
 
 ### Schnellstart
-Hilfe und Hinweise anzeigen:
+Optionsmenü öffnen und alles ingame konfigurieren:
 
 ```text
-/cfh show
+/cfh
 ```
 
-Manuellen Scan auslösen:
+Im Optionsmenü kannst du:
+- Umhänge: ItemIDs hinzufügen, aktuelle Umhänge (mit Namen) sehen und Einträge entfernen.
+- Spezialisierungen: pro Skillung die gewünschte Faser per Dropdown auswählen.
+
+Manuellen Scan jederzeit auslösen:
 
 ```text
 /cfh scan
 ```
 
 ### Faser einer Skillung (Spezialisierung) zuordnen
-Du kannst per Name oder Nummer setzen. Gültige Kategorien: `crit`, `haste`, `versa` (Vielseitigkeit), `mastery` (oder die lokalisierten Namen).
+Bevorzugt: über die Dropdowns im Optionsmenü (Optionen → AddOns → Cloak Fiber Helper oder `/cfh`).
+
+Alternativ per Slash-Befehl (Name oder Zahl). Gültige Kategorien: `crit`, `haste`, `versa` (Vielseitigkeit), `mastery` (oder die lokalisierten Namen).
 
 - Für die aktuelle Skillung setzen:
 
@@ -41,7 +48,9 @@ Du kannst per Name oder Nummer setzen. Gültige Kategorien: `crit`, `haste`, `ve
 Tipp: Mit `/cfh show` siehst du deine Skillungen mit deren IDs und aktueller Zuordnung.
 
 ### Erlaubte Umhänge begrenzen
-Standardmäßig ist Umhang-ItemID `235499` erlaubt. Du kannst die Liste ersetzen (kommasepariert):
+Bevorzugt: über das Optionsmenü im Bereich „Umhänge“ ItemIDs hinzufügen/entfernen.
+
+Alternativ die Liste direkt ersetzen (kommasepariert):
 
 ```text
 /cfh cloaks 235499,12345,67890
@@ -72,10 +81,10 @@ Popups (erscheinen einmal pro Sitzung, bis sich die Situation ändert):
 - Falsche Faser: zeigt aktuelle vs. erwartete Faser-Kategorie
 - Kein erlaubter Umhang ausgerüstet
 
-### Slash-Befehle
+### Slash-Befehle (optional)
 ```text
-/cfh show
-  Zeigt die aktuelle Konfiguration, Skillungs-IDs mit zugewiesenen Faser-Kategorien und kurze Hilfe.
+/cfh
+  Öffnet das Optionsmenü.
 
 /cfh scan
   Startet sofort eine Prüfung des Umhangs und der Fasern.

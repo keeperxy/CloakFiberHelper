@@ -1,9 +1,10 @@
 ## CloakFiberHelper
 
-Checks whether your equipped cloak contains a fiber from the correct category for your current specialization. Provides simple slash commands and a small helper UI.
+Checks whether your equipped cloak contains a fiber from the correct category for your current specialization. Comes with an in-game options panel and optional slash commands.
 
 ### Features
 - Auto-scan on login, on cloak change, and when changing specialization
+- In-game configuration via Options → AddOns or `/cfh`
 - Manual scan via slash command or a small "Scan now" button
 - Per-character settings (SavedVariables)
 - Per-spec desired fiber category (Critical Strike, Haste, Versatility, Mastery)
@@ -11,20 +12,26 @@ Checks whether your equipped cloak contains a fiber from the correct category fo
 - English and German localization
 
 ### Quick start
-Open the helper and see usage hints:
+Open the options panel and configure everything in-game:
 
 ```text
-/cfh show
+/cfh
 ```
 
-Manually trigger a scan:
+In the options panel you can:
+- Cloaks: add ItemIDs, see current cloaks (with names), and remove entries.
+- Specializations: pick the desired fiber per spec via dropdown.
+
+Manually trigger a scan at any time:
 
 ```text
 /cfh scan
 ```
 
 ### Assigning a desired fiber per specialization
-You can assign by name or number. Valid categories: `crit`, `haste`, `versa` (versatility), `mastery` (or their localized names).
+Preferred: use the options panel dropdowns (Options → AddOns → Cloak Fiber Helper or `/cfh`).
+
+Alternatively, use slash commands (names or numbers). Valid categories: `crit`, `haste`, `versa` (versatility), `mastery` (or their localized names).
 
 - Assign for your current spec:
 
@@ -41,7 +48,9 @@ You can assign by name or number. Valid categories: `crit`, `haste`, `versa` (ve
 Tip: Use `/cfh show` to list your specs with their spec IDs and current assignment.
 
 ### Restricting to allowed cloak ItemIDs
-By default the addon allows cloak ItemID `235499`. You can override the allowed list with a comma-separated list:
+Preferred: use the options panel to add/remove ItemIDs in the Cloaks section.
+
+Alternatively, replace the list with a comma-separated list:
 
 ```text
 /cfh cloaks 235499,12345,67890
@@ -72,10 +81,10 @@ Popups (can appear once per session until the condition changes):
 - Wrong fiber: shows actual vs expected fiber category
 - No allowed cloak equipped
 
-### Slash command reference
+### Slash command reference (optional)
 ```text
-/cfh show
-  Prints current configuration, spec IDs with their assigned fiber categories, and usage hints.
+/cfh
+  Opens the options panel.
 
 /cfh scan
   Triggers an immediate scan of your cloak and fibers.
