@@ -1,0 +1,6 @@
+package-as: CloakFiberHelper
+ignore:
+  - .git
+  - .gitignore
+  - .pkgmeta
+tag: 1.1.1
