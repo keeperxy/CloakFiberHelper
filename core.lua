@@ -200,6 +200,12 @@ local function ensureFiberItemDataLoaded(fiberIDs)
   return scheduled
 end
 
+-- Detect if the Blizzard socketing UI is open to avoid tainting protected actions
+local function isSocketingFrameOpen()
+  return (ItemSocketingFrame and ItemSocketingFrame:IsShown())
+    or (ItemSocketingSocket1 and ItemSocketingSocket1:IsVisible())
+end
+
 -- Static popup for wrong fiber, with session gating
 StaticPopupDialogs["CLOAKFIBERHELPER_WRONG_FIBER"] = {
   text = L["POPUP_WRONG_FIBER"] or "Wrong cloak fiber: %s\nExpected: %s",
@@ -248,8 +254,10 @@ function CloakFiberHelper:ScanCloak()
   if not itemID or not isCloakAllowed(itemID) then
     print("[CFH] " .. (L["RESULT_FAIL_NO_CLOAK"] or "No allowed cloak equipped."))
     if not CloakFiberHelper._warnedNoCloak then
-      StaticPopup_Show("CLOAKFIBERHELPER_NO_CLOAK")
-      CloakFiberHelper._warnedNoCloak = true
+      if not isSocketingFrameOpen() then
+        StaticPopup_Show("CLOAKFIBERHELPER_NO_CLOAK")
+        CloakFiberHelper._warnedNoCloak = true
+      end
     end
     return false
   end
@@ -291,8 +299,10 @@ function CloakFiberHelper:ScanCloak()
   print("[CFH] " .. string.format(L["RESULT_FAIL_WRONG_FIBER"] or "Equipped fiber %s is not in desired category %s.", tostring(actualLabel), expected))
 
   if not CloakFiberHelper._warnedWrongFiber then
-    StaticPopup_Show("CLOAKFIBERHELPER_WRONG_FIBER", tostring(actualLabel), expected)
-    CloakFiberHelper._warnedWrongFiber = true
+    if not isSocketingFrameOpen() then
+      StaticPopup_Show("CLOAKFIBERHELPER_WRONG_FIBER", tostring(actualLabel), expected)
+      CloakFiberHelper._warnedWrongFiber = true
+    end
   end
   return false
 end
@@ -300,6 +310,9 @@ end
 CloakFiberHelper:RegisterEvent("PLAYER_ENTERING_WORLD")
 CloakFiberHelper:RegisterEvent("PLAYER_EQUIPMENT_CHANGED")
 CloakFiberHelper:RegisterEvent("PLAYER_SPECIALIZATION_CHANGED")
+-- React to socketing UI to prevent protected actions from being tainted by our popups
+CloakFiberHelper:RegisterEvent("SOCKET_INFO_UPDATE")
+CloakFiberHelper:RegisterEvent("SOCKET_INFO_CLOSE")
 
 CloakFiberHelper:SetScript("OnEvent", function(self, event, ...)
   if event == "PLAYER_ENTERING_WORLD" then
@@ -321,6 +334,20 @@ CloakFiberHelper:SetScript("OnEvent", function(self, event, ...)
       CloakFiberHelper._warnedNoCloak = false
       CloakFiberHelper:ScanCloak()
     end
+  elseif event == "SOCKET_INFO_UPDATE" then
+    -- While socketing UI is open, ensure our popups are hidden to avoid taint
+    if isSocketingFrameOpen() then
+      StaticPopup_Hide("CLOAKFIBERHELPER_WRONG_FIBER")
+      StaticPopup_Hide("CLOAKFIBERHELPER_NO_CLOAK")
+      -- Allow showing again after the socketing frame is closed
+      CloakFiberHelper._warnedWrongFiber = false
+      CloakFiberHelper._warnedNoCloak = false
+    end
+  elseif event == "SOCKET_INFO_CLOSE" then
+    -- Re-evaluate once socketing has been closed; popups may be shown now if still relevant
+    CloakFiberHelper._warnedWrongFiber = false
+    CloakFiberHelper._warnedNoCloak = false
+    C_Timer.After(0.1, function() CloakFiberHelper:ScanCloak() end)
   end
 end)
 
