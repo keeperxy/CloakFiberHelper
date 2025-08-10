@@ -21,10 +21,21 @@ local fiberTiers = {
 
 local defaultAllowedCloaks = {235499}
 
+-- State
+local pendingRescanDelaySec = 0.8
+
 local function getPlayerKey()
   local name, realm = UnitName("player")
   realm = realm or GetRealmName()
   return string.format("%s-%s", name or "Unknown", realm or "Unknown")
+end
+
+local function scheduleScan(delaySeconds)
+  C_Timer.After(delaySeconds or pendingRescanDelaySec, function()
+    if CloakFiberHelper and CloakFiberHelper.ScanCloak then
+      CloakFiberHelper:ScanCloak()
+    end
+  end)
 end
 
 local function getSpecID()
@@ -240,10 +251,16 @@ StaticPopupDialogs["CLOAKFIBERHELPER_NO_CLOAK"] = {
   end,
 }
 
-function CloakFiberHelper:ScanCloak()
+function CloakFiberHelper:ScanCloak(forcePrint)
   ensureDefaults()
   local specID = getSpecID()
   local desiredTier = getDesiredTierForCurrentSpec()
+
+  -- Defer while loading screen is active
+  if CloakFiberHelper._loadingScreen then
+    scheduleScan(1.0)
+    return false
+  end
 
   -- Delay until cloak item data is cached
   if ensureCloakItemLoaded() then return false end
@@ -251,8 +268,31 @@ function CloakFiberHelper:ScanCloak()
   local link = getFullItemLinkFromSlot("player", EQUIP_SLOT_CLOAK)
   local itemID = GetInventoryItemID("player", EQUIP_SLOT_CLOAK) or getItemIDFromLink(link)
 
-  if not itemID or not isCloakAllowed(itemID) then
-    print("[CFH] " .. (L["RESULT_FAIL_NO_CLOAK"] or "No allowed cloak equipped."))
+  -- If the engine hasn't yet populated the equipment slot (e.g., right after a loading screen), try again shortly
+  if not itemID then
+    scheduleScan(1.0)
+    return false
+  end
+
+  -- Lightweight result print throttling to avoid duplicate spam during zone transitions
+  local function shouldPrintResult(resultKey)
+    if forcePrint then return true end
+    local now = GetTime and GetTime() or 0
+    local last = CloakFiberHelper._lastResult or { key = nil, time = 0 }
+    if resultKey ~= last.key then return true end
+    if (now - (last.time or 0)) >= 5 then return true end
+    return false
+  end
+  local function markPrinted(resultKey)
+    CloakFiberHelper._lastResult = { key = resultKey, time = GetTime and GetTime() or 0 }
+  end
+
+  if not isCloakAllowed(itemID) then
+    local key = "NO_CLOAK"
+    if shouldPrintResult(key) then
+      print("[CFH] " .. (L["RESULT_FAIL_NO_CLOAK"] or "No allowed cloak equipped."))
+      markPrinted(key)
+    end
     if not CloakFiberHelper._warnedNoCloak then
       if not isSocketingFrameOpen() then
         StaticPopup_Show("CLOAKFIBERHELPER_NO_CLOAK")
@@ -269,7 +309,11 @@ function CloakFiberHelper:ScanCloak()
 
   local fiberIDs = getFiberIDs(link)
   if #fiberIDs == 0 then
-    print("[CFH] " .. (L["RESULT_FAIL_NO_FIBER"] or "No fiber detected in cloak."))
+    local key = "NO_FIBER"
+    if shouldPrintResult(key) then
+      print("[CFH] " .. (L["RESULT_FAIL_NO_FIBER"] or "No fiber detected in cloak."))
+      markPrinted(key)
+    end
     return false
   end
 
@@ -277,13 +321,21 @@ function CloakFiberHelper:ScanCloak()
   if ensureFiberItemDataLoaded(fiberIDs) then return false end
 
   if not desiredTier then
-    print("[CFH] " .. (L["SPEC_UNASSIGNED"] or "Unassigned") .. string.format(" (spec %s)", tostring(specID)))
+    local key = "UNASSIGNED:" .. tostring(specID)
+    if shouldPrintResult(key) then
+      print("[CFH] " .. (L["SPEC_UNASSIGNED"] or "Unassigned") .. string.format(" (spec %s)", tostring(specID)))
+      markPrinted(key)
+    end
     return false
   end
 
   for _, fiberID in ipairs(fiberIDs) do
     if tierContainsFiberID(desiredTier, fiberID) then
-      print("[CFH] " .. string.format(L["RESULT_OK"] or "OK for %s", getTierDisplayName(desiredTier)))
+      local key = "OK:" .. tostring(desiredTier) .. ":" .. tostring(itemID)
+      if shouldPrintResult(key) then
+        print("[CFH] " .. string.format(L["RESULT_OK"] or "OK for %s", getTierDisplayName(desiredTier)))
+        markPrinted(key)
+      end
       return true
     end
   end
@@ -296,7 +348,13 @@ function CloakFiberHelper:ScanCloak()
   end
   local actualLabel = actualTierIndex and getTierDisplayName(actualTierIndex) or tostring(firstFiber or "?")
   local expected = getTierDisplayName(desiredTier)
-  print("[CFH] " .. string.format(L["RESULT_FAIL_WRONG_FIBER"] or "Equipped fiber %s is not in desired category %s.", tostring(actualLabel), expected))
+  do
+    local key = "WRONG:" .. tostring(actualLabel) .. ":" .. tostring(expected)
+    if shouldPrintResult(key) then
+      print("[CFH] " .. string.format(L["RESULT_FAIL_WRONG_FIBER"] or "Equipped fiber %s is not in desired category %s.", tostring(actualLabel), expected))
+      markPrinted(key)
+    end
+  end
 
   if not CloakFiberHelper._warnedWrongFiber then
     if not isSocketingFrameOpen() then
@@ -313,12 +371,16 @@ CloakFiberHelper:RegisterEvent("PLAYER_SPECIALIZATION_CHANGED")
 -- React to socketing UI to prevent protected actions from being tainted by our popups
 CloakFiberHelper:RegisterEvent("SOCKET_INFO_UPDATE")
 CloakFiberHelper:RegisterEvent("SOCKET_INFO_CLOSE")
+-- React to loading screens to avoid false negatives during zone transitions
+CloakFiberHelper:RegisterEvent("LOADING_SCREEN_ENABLED")
+CloakFiberHelper:RegisterEvent("LOADING_SCREEN_DISABLED")
 
 CloakFiberHelper:SetScript("OnEvent", function(self, event, ...)
   if event == "PLAYER_ENTERING_WORLD" then
     ensureDefaults()
     CloakFiberHelper._warnedWrongFiber = false
     CloakFiberHelper._warnedNoCloak = false
+    CloakFiberHelper._loadingScreen = false
     C_Timer.After(5, function() CloakFiberHelper:ScanCloak() end)
   elseif event == "PLAYER_EQUIPMENT_CHANGED" then
     local slot = ...
@@ -348,6 +410,13 @@ CloakFiberHelper:SetScript("OnEvent", function(self, event, ...)
     CloakFiberHelper._warnedWrongFiber = false
     CloakFiberHelper._warnedNoCloak = false
     C_Timer.After(0.1, function() CloakFiberHelper:ScanCloak() end)
+  elseif event == "LOADING_SCREEN_ENABLED" then
+    CloakFiberHelper._loadingScreen = true
+  elseif event == "LOADING_SCREEN_DISABLED" then
+    CloakFiberHelper._loadingScreen = false
+    CloakFiberHelper._warnedWrongFiber = false
+    CloakFiberHelper._warnedNoCloak = false
+    scheduleScan(0.8)
   end
 end)
 

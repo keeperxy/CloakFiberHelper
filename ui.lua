@@ -56,7 +56,7 @@ local function ensureScanButton()
   f:Hide()
   f:SetScript("OnClick", function()
     if CloakGemHelper and CloakGemHelper.ScanCloak then
-      CloakGemHelper:ScanCloak()
+      CloakGemHelper:ScanCloak(true)
     end
   end)
 end
