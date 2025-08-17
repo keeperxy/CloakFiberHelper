@@ -37,5 +37,15 @@ L["POPUP_NO_CLOAK"] = "Kein erlaubter Umhang ausgerüstet."
 -- Set confirm
 L["SET_SPEC_TO_TIER"] = "%s auf %s gesetzt"
 
+-- Game modes
+L["OUTDOOR"] = "Outdoor"
+L["MYTHICPLUS"] = "M+"
+L["RAID"] = "Raid"
+
+-- Session disable/enable
+L["SESSION_DISABLED"] = "Session-Warnungen bis zum Neuladen deaktiviert"
+L["SESSION_ENABLED"] = "Session-Warnungen wieder aktiviert"
+L["SESSION_DISABLE_HINT"] = "Verwende '/cfh sessiondisable' um Popups zu deaktivieren oder '/cfh sessionenable' um sie wieder zu aktivieren."
+
 
 

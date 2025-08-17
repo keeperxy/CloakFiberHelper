@@ -37,5 +37,15 @@ L["POPUP_NO_CLOAK"] = "No allowed cloak equipped."
 -- Set confirm
 L["SET_SPEC_TO_TIER"] = "Set %s to %s"
 
+-- Game modes
+L["OUTDOOR"] = "Outdoor"
+L["MYTHICPLUS"] = "M+"
+L["RAID"] = "Raid"
+
+-- Session disable/enable
+L["SESSION_DISABLED"] = "Session warnings disabled until reload"
+L["SESSION_ENABLED"] = "Session warnings re-enabled"
+L["SESSION_DISABLE_HINT"] = "Use '/cfh sessiondisable' to disable popups or '/cfh sessionenable' to re-enable them."
+
 
 

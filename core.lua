@@ -11,6 +11,19 @@ CloakFiberHelperDB = CloakFiberHelperDB or {}
 -- Constants
 local EQUIP_SLOT_CLOAK = 15
 
+-- Game modes
+local GAME_MODES = {
+  OUTDOOR = 1,
+  MYTHICPLUS = 2,
+  RAID = 3,
+}
+
+local GAME_MODE_NAMES = {
+  [GAME_MODES.OUTDOOR] = "OUTDOOR",
+  [GAME_MODES.MYTHICPLUS] = "MYTHICPLUS", 
+  [GAME_MODES.RAID] = "RAID",
+}
+
 -- Fiber categories (IDs only; nameKey used for UI text)
 local fiberTiers = {
   [1] = { nameKey = "CRIT", ids = {238044, 238040} },
@@ -23,6 +36,8 @@ local defaultAllowedCloaks = {235499}
 
 -- State
 local pendingRescanDelaySec = 0.8
+local currentGameMode = GAME_MODES.OUTDOOR
+local sessionDisabled = false
 
 local function getPlayerKey()
   local name, realm = UnitName("player")
@@ -55,7 +70,21 @@ local function ensureDefaults()
   CloakFiberHelperDB[key] = CloakFiberHelperDB[key] or {}
   local charDB = CloakFiberHelperDB[key]
   charDB.allowedCloakIDs = charDB.allowedCloakIDs or { unpack(defaultAllowedCloaks) }
-  charDB.specPreferences = charDB.specPreferences or {}
+  
+  -- Migration: convert old specPreferences to new format
+  if charDB.specPreferences and not charDB.specPreferencesV2 then
+    charDB.specPreferencesV2 = {}
+    for specID, tierIndex in pairs(charDB.specPreferences) do
+      charDB.specPreferencesV2[specID] = {
+        [GAME_MODES.OUTDOOR] = tierIndex,
+        [GAME_MODES.MYTHICPLUS] = nil,
+        [GAME_MODES.RAID] = nil,
+      }
+    end
+    charDB.specPreferences = nil -- Remove old format
+  end
+  
+  charDB.specPreferencesV2 = charDB.specPreferencesV2 or {}
 end
 
 local function arrayToSet(arr)
@@ -145,7 +174,25 @@ local function getDesiredTierForCurrentSpec()
   local key = getPlayerKey()
   local charDB = CloakFiberHelperDB[key]
   local specID = getSpecID()
-  return charDB.specPreferences[specID]
+  local specPrefs = charDB.specPreferencesV2[specID]
+  if not specPrefs then return nil end
+  return specPrefs[currentGameMode]
+end
+
+local function getCurrentGameMode()
+  -- Check if we're in a mythic+ dungeon
+  local _, instanceType, difficultyID = GetInstanceInfo()
+  if instanceType == "party" and difficultyID and difficultyID >= 23 then -- Mythic+ difficulties start at 23
+    return GAME_MODES.MYTHICPLUS
+  end
+  
+  -- Check if we're in a raid
+  if instanceType == "raid" then
+    return GAME_MODES.RAID
+  end
+  
+  -- Default to outdoor
+  return GAME_MODES.OUTDOOR
 end
 
 local function tierContainsFiberID(tierIndex, fiberID)
@@ -229,7 +276,7 @@ StaticPopupDialogs["CLOAKFIBERHELPER_WRONG_FIBER"] = {
     if self and self.text then
       self.text:SetJustifyH("LEFT")
       self.text:SetJustifyV("TOP")
-      self.text:SetWidth(360)
+      self.text:SetWidth(0)
     end
   end,
 }
@@ -253,8 +300,17 @@ StaticPopupDialogs["CLOAKFIBERHELPER_NO_CLOAK"] = {
 
 function CloakFiberHelper:ScanCloak(forcePrint)
   ensureDefaults()
+  
+  -- Update current game mode
+  currentGameMode = getCurrentGameMode()
+  
   local specID = getSpecID()
   local desiredTier = getDesiredTierForCurrentSpec()
+
+  -- Skip if session is disabled
+  if sessionDisabled and not forcePrint then
+    return false
+  end
 
   -- Defer while loading screen is active
   if CloakFiberHelper._loadingScreen then
@@ -293,7 +349,7 @@ function CloakFiberHelper:ScanCloak(forcePrint)
       print("[CFH] " .. (L["RESULT_FAIL_NO_CLOAK"] or "No allowed cloak equipped."))
       markPrinted(key)
     end
-    if not CloakFiberHelper._warnedNoCloak then
+    if not CloakFiberHelper._warnedNoCloak and not sessionDisabled then
       if not isSocketingFrameOpen() then
         StaticPopup_Show("CLOAKFIBERHELPER_NO_CLOAK")
         CloakFiberHelper._warnedNoCloak = true
@@ -352,11 +408,12 @@ function CloakFiberHelper:ScanCloak(forcePrint)
     local key = "WRONG:" .. tostring(actualLabel) .. ":" .. tostring(expected)
     if shouldPrintResult(key) then
       print("[CFH] " .. string.format(L["RESULT_FAIL_WRONG_FIBER"] or "Equipped fiber %s is not in desired category %s.", tostring(actualLabel), expected))
+      print("[CFH] " .. (L["SESSION_DISABLE_HINT"] or "Use '/cfh sessiondisable' to disable popups or '/cfh sessionenable' to re-enable them."))
       markPrinted(key)
     end
   end
 
-  if not CloakFiberHelper._warnedWrongFiber then
+  if not CloakFiberHelper._warnedWrongFiber and not sessionDisabled then
     if not isSocketingFrameOpen() then
       StaticPopup_Show("CLOAKFIBERHELPER_WRONG_FIBER", tostring(actualLabel), expected)
       CloakFiberHelper._warnedWrongFiber = true
@@ -374,6 +431,8 @@ CloakFiberHelper:RegisterEvent("SOCKET_INFO_CLOSE")
 -- React to loading screens to avoid false negatives during zone transitions
 CloakFiberHelper:RegisterEvent("LOADING_SCREEN_ENABLED")
 CloakFiberHelper:RegisterEvent("LOADING_SCREEN_DISABLED")
+-- React to zone changes to detect M+ and raids
+CloakFiberHelper:RegisterEvent("ZONE_CHANGED_NEW_AREA")
 
 CloakFiberHelper:SetScript("OnEvent", function(self, event, ...)
   if event == "PLAYER_ENTERING_WORLD" then
@@ -417,6 +476,15 @@ CloakFiberHelper:SetScript("OnEvent", function(self, event, ...)
     CloakFiberHelper._warnedWrongFiber = false
     CloakFiberHelper._warnedNoCloak = false
     scheduleScan(0.8)
+  elseif event == "ZONE_CHANGED_NEW_AREA" then
+    -- Check if game mode changed and rescan
+    local newGameMode = getCurrentGameMode()
+    if newGameMode ~= currentGameMode then
+      currentGameMode = newGameMode
+      CloakFiberHelper._warnedWrongFiber = false
+      CloakFiberHelper._warnedNoCloak = false
+      scheduleScan(1.0)
+    end
   end
 end)
 
@@ -424,7 +492,13 @@ SLASH_CFH1 = "/cfh"
 SlashCmdList["CFH"] = function(msg)
   msg = (msg or ""):lower():gsub("^%s+", ""):gsub("%s+$", "")
   if msg:find("^scan") then
-    CloakFiberHelper:ScanCloak()
+    CloakFiberHelper:ScanCloak(true)
+  elseif msg:find("^sessiondisable") then
+    sessionDisabled = true
+    print("[CFH] " .. (L["SESSION_DISABLED"] or "Session warnings disabled until reload"))
+  elseif msg:find("^sessionenable") then
+    sessionDisabled = false
+    print("[CFH] " .. (L["SESSION_ENABLED"] or "Session warnings re-enabled"))
   elseif msg:find("^cloaks%s+") then
     local csv = msg:match("^cloaks%s+(.+)$")
     if csv and CloakFiberHelper._api then
@@ -469,7 +543,7 @@ SlashCmdList["CFH"] = function(msg)
       CloakGemHelper_OpenOptions()
     end
   else
-    print("[CFH] Commands: /cfh scan || /cfh cloaks 235499,12345 || /cfh set <crit||haste||versa||mastery> [specID] || /cfh show")
+    print("[CFH] Commands: /cfh scan || /cfh sessiondisable || /cfh sessionenable || /cfh cloaks 235499,12345 || /cfh set <crit||haste||versa||mastery> [specID] || /cfh show")
   end
 end
 
@@ -478,11 +552,24 @@ CloakFiberHelper._api = {
   getPlayerKey = getPlayerKey,
   getSpecID = getSpecID,
   getDesiredTierForCurrentSpec = getDesiredTierForCurrentSpec,
-  setDesiredTierForSpec = function(specID, tierIndex)
+  setDesiredTierForSpec = function(specID, tierIndex, gameMode)
     ensureDefaults()
     local key = getPlayerKey()
-    CloakFiberHelperDB[key].specPreferences[specID] = tierIndex
+    gameMode = gameMode or GAME_MODES.OUTDOOR
+    CloakFiberHelperDB[key].specPreferencesV2[specID] = CloakFiberHelperDB[key].specPreferencesV2[specID] or {}
+    CloakFiberHelperDB[key].specPreferencesV2[specID][gameMode] = tierIndex
   end,
+  getDesiredTierForSpec = function(specID, gameMode)
+    ensureDefaults()
+    local key = getPlayerKey()
+    gameMode = gameMode or currentGameMode
+    local specPrefs = CloakFiberHelperDB[key].specPreferencesV2[specID]
+    if not specPrefs then return nil end
+    return specPrefs[gameMode]
+  end,
+  getGameModes = function() return GAME_MODES end,
+  getGameModeNames = function() return GAME_MODE_NAMES end,
+  getCurrentGameMode = function() return currentGameMode end,
   getGemTiers = function() return fiberTiers end,
   getAllowedCloakIDs = function()
     ensureDefaults()

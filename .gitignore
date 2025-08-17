@@ -1,2 +1,4 @@
 # macOS-Dateien
 .DS_Store
+.kiro
+.vscode

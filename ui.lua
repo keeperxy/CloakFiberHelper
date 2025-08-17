@@ -10,17 +10,30 @@ local function printConfig()
   local csv = table.concat(cloaks, ", ")
   print("[CFH] Allowed cloaks: " .. (csv ~= "" and csv or "(none)"))
 
-  -- List specs and their desired fiber tier
+  -- List specs and their desired fiber tier for each game mode
+  local gameModes = api.getGameModes()
   for i = 1, GetNumSpecializations() do
     local specID = GetSpecializationInfo(i)
     if specID then
       local _, specName = GetSpecializationInfoByID(specID)
-      local tier = (_G.CloakFiberHelperDB[key].specPreferences[specID])
-      local tierText = tier and (api.getGemTiers()[tier] and (L[api.getGemTiers()[tier].nameKey] or api.getGemTiers()[tier].nameKey)) or (L["SPEC_UNASSIGNED"] or "Unassigned")
-      print(string.format("[CFH] Spec %s (%d): %s", specName or "?", specID, tierText))
+      local outdoorTier = api.getDesiredTierForSpec(specID, gameModes.OUTDOOR)
+      local mplusTier = api.getDesiredTierForSpec(specID, gameModes.MYTHICPLUS)
+      local raidTier = api.getDesiredTierForSpec(specID, gameModes.RAID)
+      
+      local function getTierText(tier)
+        if not tier then return (L["SPEC_UNASSIGNED"] or "Unassigned") end
+        local gemTier = api.getGemTiers()[tier]
+        return gemTier and (L[gemTier.nameKey] or gemTier.nameKey) or tostring(tier)
+      end
+      
+      print(string.format("[CFH] %s: Outdoor=%s, M+=%s, Raid=%s", 
+        specName or "?", 
+        getTierText(outdoorTier),
+        getTierText(mplusTier), 
+        getTierText(raidTier)))
     end
   end
-  print("[CFH] Commands: /cfh scan || /cfh cloaks 235499,12345 || /cfh set <crit||haste||versa||mastery> [specID]")
+  print("[CFH] Commands: /cfh scan || /cfh sessiondisable || /cfh sessionenable || /cfh cloaks 235499,12345 || /cfh set <crit||haste||versa||mastery> [specID]")
 end
 
 function CloakGemHelper_OpenOptions()
@@ -92,7 +105,7 @@ local function createOptionsPanel()
   commands:SetPoint("TOPLEFT", header, "BOTTOMLEFT", 0, -8)
   commands:SetJustifyH("LEFT")
   commands:SetWidth(700)
-  commands:SetText("/cfh scan\n/cfh cloaks 235499,12345\n/cfh set <crit||haste||versa||mastery> [specID]\n/cfh show")
+  commands:SetText("/cfh scan\n/cfh sessionenable\n/cfh sessiondisable\n/cfh cloaks 235499,12345\n/cfh set <crit||haste||versa||mastery> [specID]\n/cfh show")
 
   -- Cloak Settings section (above fiber/spec settings)
   local cloakSection = CreateFrame("Frame", nil, panel)
@@ -229,10 +242,10 @@ local function createOptionsPanel()
   specHeader:SetPoint("TOPLEFT", cloakSection, "BOTTOMLEFT", 0, -16)
   specHeader:SetText(L["DESIRED_FIBER_PER_SPEC"] or "Desired Fiber per Specialization")
 
-  -- Build dropdowns when the panel is shown the first time
+  -- Build spec table when the panel is shown the first time
   panel._builtSpecs = false
 
-  local function buildSpecDropdowns()
+  local function buildSpecTable()
     if panel._builtSpecs then return end
     panel._builtSpecs = true
 
@@ -241,57 +254,93 @@ local function createOptionsPanel()
 
     local gemTiers = api.getGemTiers() or {}
     local tierChoices = {
+      { value = nil, text = "-" },
       { value = 1, text = (L[gemTiers[1] and gemTiers[1].nameKey or "CRIT"] or "Critical Strike") },
       { value = 2, text = (L[gemTiers[2] and gemTiers[2].nameKey or "HASTE"] or "Haste") },
       { value = 3, text = (L[gemTiers[3] and gemTiers[3].nameKey or "VERS"] or "Versatility") },
       { value = 4, text = (L[gemTiers[4] and gemTiers[4].nameKey or "MASTERY"] or "Mastery") },
     }
 
-    local anchor = specHeader
+    local gameModes = api.getGameModes()
+    local gameModeNames = api.getGameModeNames()
+
+    -- Create table header
+    local headerY = -12
+    local colWidth = 120
+    local rowHeight = 30
+    local dropdownWidth = colWidth - 10
+    local startX = 150
+
+    -- Column headers - center them over the dropdowns
+    local outdoorHeader = panel:CreateFontString(nil, "ARTWORK", "GameFontNormal")
+    outdoorHeader:SetPoint("TOPLEFT", specHeader, "BOTTOMLEFT", startX + (dropdownWidth / 2), headerY)
+    outdoorHeader:SetJustifyH("CENTER")
+    outdoorHeader:SetText(L["OUTDOOR"] or "Outdoor")
+
+    local mplusHeader = panel:CreateFontString(nil, "ARTWORK", "GameFontNormal")
+    mplusHeader:SetPoint("TOPLEFT", specHeader, "BOTTOMLEFT", startX + colWidth + (dropdownWidth / 2), headerY)
+    mplusHeader:SetJustifyH("CENTER")
+    mplusHeader:SetText(L["MYTHICPLUS"] or "M+")
+
+    local raidHeader = panel:CreateFontString(nil, "ARTWORK", "GameFontNormal")
+    raidHeader:SetPoint("TOPLEFT", specHeader, "BOTTOMLEFT", startX + (colWidth * 2) + (dropdownWidth / 2), headerY)
+    raidHeader:SetJustifyH("CENTER")
+    raidHeader:SetText(L["RAID"] or "Raid")
+
     local key = api.getPlayerKey()
     local db = _G.CloakFiberHelperDB and _G.CloakFiberHelperDB[key]
 
+    -- Create rows for each specialization
     for i = 1, (GetNumSpecializations() or 0) do
       local specID = GetSpecializationInfo(i)
       if specID then
         local _, specName = GetSpecializationInfoByID(specID)
+        local yOffset = headerY - (i * rowHeight)
 
-        local label = panel:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
-        label:SetPoint("TOPLEFT", anchor, "BOTTOMLEFT", 0, -12)
-        label:SetWidth(200)
-        label:SetJustifyH("LEFT")
-        label:SetText(specName or ("Spec %d"):format(i))
+        -- Spec name label
+        local specLabel = panel:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
+        specLabel:SetPoint("TOPLEFT", specHeader, "BOTTOMLEFT", 0, yOffset)
+        specLabel:SetWidth(140)
+        specLabel:SetJustifyH("LEFT")
+        specLabel:SetText(specName or ("Spec %d"):format(i))
 
-        local dropdown = CreateFrame("Frame", nil, panel, "UIDropDownMenuTemplate")
-        dropdown:SetPoint("LEFT", label, "LEFT", 220, 0)
-        UIDropDownMenu_SetWidth(dropdown, 200)
+        -- Create dropdowns for each game mode
+        local dropdowns = {}
+        local xOffsets = {startX, startX + colWidth, startX + (colWidth * 2)}
+        
+        for modeIndex, gameMode in ipairs({gameModes.OUTDOOR, gameModes.MYTHICPLUS, gameModes.RAID}) do
+          local dropdown = CreateFrame("Frame", nil, panel, "UIDropDownMenuTemplate")
+          dropdown:SetPoint("TOPLEFT", specHeader, "BOTTOMLEFT", xOffsets[modeIndex], yOffset + 5)
+          UIDropDownMenu_SetWidth(dropdown, dropdownWidth)
 
-        UIDropDownMenu_Initialize(dropdown, function(self, level)
-          for _, choice in ipairs(tierChoices) do
-            local info = UIDropDownMenu_CreateInfo()
-            info.text = choice.text
-            info.value = choice.value
-            info.func = function()
-              UIDropDownMenu_SetSelectedValue(dropdown, choice.value)
-              if api and api.setDesiredTierForSpec then
-                api.setDesiredTierForSpec(specID, choice.value)
+          UIDropDownMenu_Initialize(dropdown, function(self, level)
+            for _, choice in ipairs(tierChoices) do
+              local info = UIDropDownMenu_CreateInfo()
+              info.text = choice.text
+              info.value = choice.value
+              info.func = function()
+                UIDropDownMenu_SetSelectedValue(dropdown, choice.value)
+                if api and api.setDesiredTierForSpec then
+                  api.setDesiredTierForSpec(specID, choice.value, gameMode)
+                end
               end
+              UIDropDownMenu_AddButton(info, level)
             end
-            UIDropDownMenu_AddButton(info, level)
+          end)
+
+          -- Set current value
+          local current = api.getDesiredTierForSpec and api.getDesiredTierForSpec(specID, gameMode) or nil
+          if current then
+            UIDropDownMenu_SetSelectedValue(dropdown, current)
           end
-        end)
 
-        local current = db and db.specPreferences and db.specPreferences[specID] or nil
-        if current then
-          UIDropDownMenu_SetSelectedValue(dropdown, current)
+          dropdowns[gameMode] = dropdown
         end
-
-        anchor = label
       end
     end
   end
 
-  panel:SetScript("OnShow", buildSpecDropdowns)
+  panel:SetScript("OnShow", buildSpecTable)
 
   if Settings and Settings.RegisterAddOnCategory and Settings.RegisterCanvasLayoutCategory then
     local category = Settings.RegisterCanvasLayoutCategory(panel, titleText)

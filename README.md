@@ -4,11 +4,14 @@ Checks whether your equipped cloak contains a fiber from the correct category fo
 
 ### Features
 - Auto-scan on login, on cloak change, and when changing specialization
+- **Multi-mode support**: Different fiber preferences for Outdoor, Mythic+, and Raid content
+- **Smart detection**: Automatically detects when you enter Mythic+ dungeons or raids
 - In-game configuration via Options → AddOns or `/cfh`
 - Manual scan via slash command or a small "Scan now" button
 - Per-character settings (SavedVariables)
-- Per-spec desired fiber category (Critical Strike, Haste, Versatility, Mastery)
+- Per-spec and per-mode desired fiber category (Critical Strike, Haste, Versatility, Mastery)
 - Restrict to specific allowed cloak ItemIDs
+- **Session control**: Temporarily disable popup warning via chat command
 - English and German localization
 
 ### Quick start
@@ -19,8 +22,11 @@ Open the options panel and configure everything in-game:
 ```
 
 In the options panel you can:
-- Cloaks: add ItemIDs, see current cloaks (with names), and remove entries.
-- Specializations: pick the desired fiber per spec via dropdown.
+- **Cloaks**: add ItemIDs, see current cloaks (with names), and remove entries.
+- **Specializations**: Configure fiber preferences for each spec across three game modes:
+  - **Outdoor**: General world content
+  - **M+**: Mythic+ dungeons (detected automatically)
+  - **Raid**: Raid instances (detected automatically)
 
 Manually trigger a scan at any time:
 
@@ -28,24 +34,21 @@ Manually trigger a scan at any time:
 /cfh scan
 ```
 
-### Assigning a desired fiber per specialization
-Preferred: use the options panel dropdowns (Options → AddOns → Cloak Fiber Helper or `/cfh`).
+### Configuring fiber preferences
+**Preferred method**: Use the options panel (Options → AddOns → Cloak Fiber Helper or `/cfh`).
 
-Alternatively, use slash commands (names or numbers). Valid categories: `crit`, `haste`, `versa` (versatility), `mastery` (or their localized names).
+The options panel shows a table with:
+- **Rows**: Your specializations (e.g., Brewmaster, Mistweaver, Windwalker)
+- **Columns**: Game modes (Outdoor, M+, Raid)
+- **Dropdowns**: Select the desired fiber for each spec/mode combination
 
-- Assign for your current spec:
+**Legacy slash commands** (for Outdoor mode only):
+Valid categories: `crit`, `haste`, `versa` (versatility), `mastery` (or their localized names).
 
-```text
-/cfh set crit
-```
+- Assign for your current spec: `/cfh set crit`
+- Assign for a specific spec ID: `/cfh set haste 266`
 
-- Assign for a specific spec ID (e.g., Demonology Warlock 266):
-
-```text
-/cfh set haste 266
-```
-
-Tip: Use `/cfh show` to list your specs with their spec IDs and current assignment.
+Tip: Use `/cfh show` to list your specs with their spec IDs and current assignments.
 
 ### Restricting to allowed cloak ItemIDs
 Preferred: use the options panel to add/remove ItemIDs in the Cloaks section.
@@ -62,26 +65,35 @@ The scan will only succeed if the equipped cloak's ItemID is in this list.
 - On login/entering world (after a short delay)
 - When you change the cloak in equipment slot 15
 - When you change specialization
+- **When entering different content types** (Outdoor ↔ Mythic+ ↔ Raid)
 - On demand via `/cfh scan`
 
 You may also see a small button labeled "Scan now" that triggers the same check.
 
-### Possible messages and popups
-Console/chat messages are prefixed with `[CFH]`.
+### Session control
+You can temporarily disable popup warnings if you're intentionally using a different fiber:
+- **Chat commands**:
+  - `/cfh sessiondisable` - Disable popup warnings for this session (until reload/relog)
+  - `/cfh sessionenable` - Re-enable popup warnings for this session
+- **Automatic hint**: When wrong fiber is detected, the addon shows these commands in chat
 
-- Success:
-  - `Cloak and fiber are OK for <Category>`
-- Warnings/Errors:
+### Messages and popups
+Console/chat messages are prefixed with `[CFH]` and show the current game mode context.
+
+- **Success**: `Cloak and fiber are OK for <Category>`
+- **Warnings/Errors**:
   - `No allowed cloak equipped.`
   - `No fiber detected in cloak.`
-  - `Unassigned (spec <id>)` — You have not set a desired category for this spec yet
+  - `Unassigned (spec <id>)` — No fiber preference set for current spec/mode
   - `Equipped fiber <Actual> is not in desired category <Expected>.`
 
-Popups (can appear once per session until the condition changes):
-- Wrong fiber: shows actual vs expected fiber category
-- No allowed cloak equipped
+**Popups** (appear once per session unless condition changes):
+- **Wrong fiber**: Shows actual vs expected fiber category
+- **No allowed cloak**: Notification when equipped cloak is not in allowed list
 
-### Slash command reference (optional)
+**Session control hints**: When wrong fiber is detected, chat shows available commands to disable/enable popup warnings.
+
+### Slash command reference
 ```text
 /cfh
   Opens the options panel.
@@ -89,8 +101,15 @@ Popups (can appear once per session until the condition changes):
 /cfh scan
   Triggers an immediate scan of your cloak and fibers.
 
+/cfh sessiondisable
+  Disables popup warnings for this session (until reload/relog).
+
+/cfh sessionenable
+  Re-enables popup warnings for this session.
+
 /cfh set <crit|haste|versa|mastery> [specID]
-  Sets the desired fiber category for the given spec. If specID is omitted, applies to your current spec.
+  Sets the desired fiber category for the given spec (Outdoor mode only).
+  If specID is omitted, applies to your current spec.
 
 /cfh cloaks <id1,id2,...>
   Replaces the allowed cloak ItemID list with the provided comma-separated IDs.
